@@ -1,8 +1,70 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Сравнение акций через Google Finance + Cloudflare Proxy</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    input { width: 300px; padding: 5px; }
+    button { padding: 5px 10px; }
+    .stock { margin: 10px 0; }
+    .ticker { font-weight: bold; }
+  </style>
+</head>
 <body>
 
-<h2>ИДИТЕ ВЫ ВСЕ НАХУЙ</h2>
+  <h1>Сравнить акции (P/E, P/B) через Google Finance</h1>
+  <input id="tickers" placeholder="AAPL, MSFT, GOOGL" />
+  <button id="btn">Сравнить</button>
+
+  <div id="results"></div>
+
+  <script>
+    document.getElementById('btn').addEventListener('click', compareStocks);
+
+    async function compareStocks() {
+      const input = document.getElementById('tickers').value;
+      const tickers = input.split(',').map(t => t.trim()).filter(t => t);
+      const results = document.getElementById('results');
+      results.innerHTML = '';
+
+      // Замените на свой Worker URL:
+      const proxyBase = 'https://finance-proxy.YOUR_SUBDOMAIN.workers.dev/';
+      
+      for (const ticker of tickers) {
+        const gfUrl = `https://finance.google.com/finance/info?client=ig&q=${ticker}`;
+        const url = proxyBase + '?url=' + encodeURIComponent(gfUrl);
+
+        try {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          let text = await res.text();
+          text = text.replace(/^\/\/\s+/, '');
+          const data = JSON.parse(text)[0];
+
+          const pe  = data.pe  ?? '—';
+          const pb  = data.pb  ?? '—';
+          const peg = data.peg ?? '—';
+
+          const div = document.createElement('div');
+          div.className = 'stock';
+          div.innerHTML = `
+            <span class="ticker">${data.t}</span>:
+            P/E = ${pe}, 
+            P/B = ${pb}, 
+            PEG = ${peg}
+          `;
+          results.appendChild(div);
+
+        } catch (err) {
+          const div = document.createElement('div');
+          div.className = 'stock';
+          div.textContent = `Ошибка для ${ticker}: ${err.message}`;
+          results.appendChild(div);
+        }
+      }
+    }
+  </script>
 
 </body>
 </html>
