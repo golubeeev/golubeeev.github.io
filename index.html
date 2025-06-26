@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Сравнение акций через Google Finance + Cloudflare Proxy</title>
+  <title>Finance Compare </title>
   <style>
     body { font-family: sans-serif; padding: 20px; }
     input { width: 300px; padding: 5px; }
@@ -13,7 +13,7 @@
 </head>
 <body>
 
-  <h1>Сравнить акции (P/E, P/B) через Google Finance</h1>
+  <h1>Сравнить акции через Google Finance</h1>
   <input id="tickers" placeholder="AAPL, MSFT, GOOGL" />
   <button id="btn">Сравнить</button>
 
@@ -29,7 +29,7 @@
       results.innerHTML = '';
 
       // Замените на свой Worker URL:
-      const proxyBase = 'https://finance-proxy.YOUR_SUBDOMAIN.workers.dev/';
+      const proxyBase = 'https://finwork.zhuikovalexander824.workers.dev/';
       
       for (const ticker of tickers) {
         const gfUrl = `https://finance.google.com/finance/info?client=ig&q=${ticker}`;
