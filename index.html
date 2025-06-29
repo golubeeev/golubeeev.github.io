@@ -1,100 +1,41 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <title>Сравнение акций через Yahoo Finance + Cloudflare Proxy</title>
-  <style>
-    body { font-family: sans-serif; padding: 20px; }
-    input { width: 300px; padding: 5px; }
-    button { padding: 5px 10px; }
-    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
-    th { background-color: #f4f4f4; }
-    .error { color: red; margin-top: 10px; }
-  </style>
+  …
 </head>
 <body>
-
-  <h1>Сравнить акции (P/E, P/B, PEG) через Yahoo Finance</h1>
-  <input id="tickers" placeholder="AAPL, MSFT, GOOGL" />
-  <button id="btn">Сравнить</button>
+  <h1>Сравнить акции из CSV</h1>
+  <button id="load">Загрузить таблицу</button>
   <div id="results"></div>
 
   <script>
-    document.getElementById('btn').addEventListener('click', compareStocks);
-
-    async function fetchWithRetry(url, options = {}, retries = 3, backoff = 500) {
-      for (let i = 0; i < retries; i++) {
-        const res = await fetch(url, options);
-        if (res.status !== 429) return res;
-        // 429 — Too Many Requests
-        await new Promise(r => setTimeout(r, backoff * Math.pow(2, i)));
+    document.getElementById('load').addEventListener('click', async () => {
+      const res = await fetch('data/stocks.csv');
+      if (!res.ok) {
+        return document.getElementById('results').textContent =
+          'Не удалось загрузить data/stocks.csv';
       }
-      // Последняя попытка
-      return fetch(url, options);
-    }
+      const text = await res.text();
+      // простой парсер CSV
+      const rows = text.trim().split('\n').map(r => r.split(','));
+      const [header, ...data] = rows;
 
-    async function compareStocks() {
-      const input = document.getElementById('tickers').value;
-      const symbols = input.split(',').map(s => s.trim()).filter(s => s);
+      // создаём таблицу
+      const table = document.createElement('table');
+      table.innerHTML = `
+        <thead>
+          <tr>${header.map(h => `<th>${h}</th>`).join('')}</tr>
+        </thead>
+        <tbody>
+          ${data.map(row =>
+            `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`
+          ).join('')}
+        </tbody>
+      `;
       const results = document.getElementById('results');
       results.innerHTML = '';
-
-      if (!symbols.length) {
-        results.innerHTML = '<div class="error">Введите хотя бы один тикер.</div>';
-        return;
-      }
-
-      const proxyBase = 'https://finwork.zhuikovalexander824.workers.dev';
-      const param = symbols.join(',');
-      const fetchURL = `${proxyBase}/?symbols=${encodeURIComponent(param)}`;
-
-      try {
-        const res = await fetchWithRetry(fetchURL);
-        if (!res.ok) {
-          if (res.status === 429) throw new Error('Слишком много запросов. Попробуйте позже.');
-          throw new Error(`HTTP ${res.status}`);
-        }
-        const json = await res.json();
-        const items = json.quoteResponse.result;
-
-        if (!items || !items.length) {
-          results.innerHTML = '<div class="error">Данные не найдены.</div>';
-          return;
-        }
-
-        const table = document.createElement('table');
-        const thead = document.createElement('thead');
-        thead.innerHTML = `
-          <tr>
-            <th>Тикер</th>
-            <th>Цена</th>
-            <th>P/E</th>
-            <th>P/B</th>
-            <th>PEG</th>
-          </tr>`;
-        table.appendChild(thead);
-
-        const tbody = document.createElement('tbody');
-        items.forEach(item => {
-          const row = document.createElement('tr');
-          row.innerHTML = `
-            <td>${item.symbol}</td>
-            <td>${item.regularMarketPrice ?? '—'}</td>
-            <td>${item.trailingPE ?? '—'}</td>
-            <td>${item.priceToBook ?? '—'}</td>
-            <td>${item.pegRatio ?? '—'}</td>
-          `;
-          tbody.appendChild(row);
-        });
-        table.appendChild(tbody);
-
-        results.appendChild(table);
-      } catch (err) {
-        results.innerHTML = `<div class="error">Ошибка: ${err.message}</div>`;
-      }
-    }
+      results.appendChild(table);
+    });
   </script>
-
 </body>
 </html>
