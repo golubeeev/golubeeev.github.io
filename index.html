@@ -2,66 +2,96 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Finance Compare </title>
+  <title>Сравнение акций через Yahoo Finance + Cloudflare Proxy</title>
   <style>
     body { font-family: sans-serif; padding: 20px; }
     input { width: 300px; padding: 5px; }
     button { padding: 5px 10px; }
-    .stock { margin: 10px 0; }
-    .ticker { font-weight: bold; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+    th { background-color: #f4f4f4; }
+    .error { color: red; margin-top: 10px; }
   </style>
 </head>
 <body>
 
-  <h1>Сравнить акции через Google Finance</h1>
+  <h1>Сравнить акции (P/E, P/B, PEG) через Yahoo Finance</h1>
   <input id="tickers" placeholder="AAPL, MSFT, GOOGL" />
   <button id="btn">Сравнить</button>
-
   <div id="results"></div>
 
   <script>
     document.getElementById('btn').addEventListener('click', compareStocks);
 
+    async function fetchWithRetry(url, options = {}, retries = 3, backoff = 500) {
+      for (let i = 0; i < retries; i++) {
+        const res = await fetch(url, options);
+        if (res.status !== 429) return res;
+        // 429 — Too Many Requests
+        await new Promise(r => setTimeout(r, backoff * Math.pow(2, i)));
+      }
+      // Последняя попытка
+      return fetch(url, options);
+    }
+
     async function compareStocks() {
       const input = document.getElementById('tickers').value;
-      const tickers = input.split(',').map(t => t.trim()).filter(t => t);
+      const symbols = input.split(',').map(s => s.trim()).filter(s => s);
       const results = document.getElementById('results');
       results.innerHTML = '';
 
-      // Замените на свой Worker URL:
-      const proxyBase = 'https://finwork.zhuikovalexander824.workers.dev/';
-      
-      for (const ticker of tickers) {
-        const gfUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbols)}`;
-        const url = proxyBase + '?url=' + encodeURIComponent(gfUrl);
+      if (!symbols.length) {
+        results.innerHTML = '<div class="error">Введите хотя бы один тикер.</div>';
+        return;
+      }
 
-        try {
-          const res = await fetch(url);
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          let text = await res.text();
-          text = text.replace(/^\/\/\s+/, '');
-          const data = JSON.parse(text)[0];
+      const proxyBase = 'https://finwork.zhuikovalexander824.workers.dev';
+      const param = symbols.join(',');
+      const fetchURL = `${proxyBase}/?symbols=${encodeURIComponent(param)}`;
 
-          const pe  = data.pe  ?? '—';
-          const pb  = data.pb  ?? '—';
-          const peg = data.peg ?? '—';
-
-          const div = document.createElement('div');
-          div.className = 'stock';
-          div.innerHTML = `
-            <span class="ticker">${data.t}</span>:
-            P/E = ${pe}, 
-            P/B = ${pb}, 
-            PEG = ${peg}
-          `;
-          results.appendChild(div);
-
-        } catch (err) {
-          const div = document.createElement('div');
-          div.className = 'stock';
-          div.textContent = `Ошибка для ${ticker}: ${err.message}`;
-          results.appendChild(div);
+      try {
+        const res = await fetchWithRetry(fetchURL);
+        if (!res.ok) {
+          if (res.status === 429) throw new Error('Слишком много запросов. Попробуйте позже.');
+          throw new Error(`HTTP ${res.status}`);
         }
+        const json = await res.json();
+        const items = json.quoteResponse.result;
+
+        if (!items || !items.length) {
+          results.innerHTML = '<div class="error">Данные не найдены.</div>';
+          return;
+        }
+
+        const table = document.createElement('table');
+        const thead = document.createElement('thead');
+        thead.innerHTML = `
+          <tr>
+            <th>Тикер</th>
+            <th>Цена</th>
+            <th>P/E</th>
+            <th>P/B</th>
+            <th>PEG</th>
+          </tr>`;
+        table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        items.forEach(item => {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${item.symbol}</td>
+            <td>${item.regularMarketPrice ?? '—'}</td>
+            <td>${item.trailingPE ?? '—'}</td>
+            <td>${item.priceToBook ?? '—'}</td>
+            <td>${item.pegRatio ?? '—'}</td>
+          `;
+          tbody.appendChild(row);
+        });
+        table.appendChild(tbody);
+
+        results.appendChild(table);
+      } catch (err) {
+        results.innerHTML = `<div class="error">Ошибка: ${err.message}</div>`;
       }
     }
   </script>
